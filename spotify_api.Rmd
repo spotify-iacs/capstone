@@ -1,0 +1,222 @@
+---
+title: "Spotify 1: Intial Models for Predicting Number of Playlist Followers"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Main conclusions: 
+  - Adding audio attributes generally did not make a substantial difference in predicting number of playlist followers. Duration and time signature may have some statistically significant predictive contribution.
+  - Non-audio attributes (e.g the date songs were added, the popularity of the individual songs, total number of tracks, and whether the songs were "featured" by Spotify) are most significant in predicting number of followers.
+  - We see a reasonable model fit for predicting the log of the # of playlist followers: R^2 = 0.48
+  
+  
+## Read in the Data and drop unnecessary fields
+
+```{r}
+train <- read.csv("/Users/lware/Harvard/spotify/capstone/playlist_data_with_audio_attributes_percentiles_3.11.17.csv",
+                  header=TRUE,sep=',')
+library(mgcv)
+dim(train)
+train$added_date = as.Date(train$added_date)
+
+
+# Add a field for log of followers, which will be a more appropriate response variable.
+train$logfollowers = log(train$followers+1)
+train$logfollowers[train$logfollowers<0]=0
+drops <-c("names", "playlist_id","X")
+train = train[ , !(names(train) %in% drops)]
+train = na.omit(train)
+dim(train)
+str(train)
+```
+## Exploration of relationships between features
+```{r}
+library(GGally)
+subset = train[c(2,6,19,17, 14)]
+ggpairs(subset)
+```
+
+
+## Create some models and make predictions
+```{r}
+library(ggplot2)
+
+formula.1 = as.formula(paste0("followers ~ s(total_tracks) + s(num_markets) + energy + loudness +
+                            s(mean_popularity) + danceability"))
+
+formula.2 = as.formula(paste0("followers ~ s(acousticness) + 
+                            s(danceability) + 
+                            s(duration) + 
+                            s(energy) +
+                            s(instrumentalness) + 
+                            s(key) + 
+                            s(liveness) + 
+                            s(loudness) + 
+                            s(mean_popularity) + 
+                            s(mode) + 
+                            s(num_markets) + 
+                            s(tempo) + 
+                            s(time_signature) + 
+                            s(total_tracks) + 
+                            s(valence)"))
+
+formula.3 = as.formula(paste0("logfollowers ~ acousticness + added_date + 
+                            featured + 
+                            danceability + 
+                            duration + 
+                            energy +
+                            instrumentalness + 
+                            key + 
+                            liveness + 
+                            loudness + 
+                            s(mean_popularity) + 
+                            mode + 
+                            s(num_markets) + 
+                            tempo + 
+                            time_signature + 
+                            s(total_tracks) + 
+                            valence"))
+
+formula.4 = as.formula(paste0("logfollowers ~ added_date + featured + time_signature + duration + 
+                            s(mean_popularity) + 
+                            s(total_tracks)"))
+
+formula.5 = as.formula(paste0("logfollowers ~ added_date + featured +
+                            s(mean_popularity) + 
+                            s(total_tracks)"))
+
+formula.6 = as.formula(paste0("logfollowers ~ duration + time_signature"))
+
+rsq = function(model, data, y) {
+  y <- data[[y]]
+  predict <- predict(model, newdata = data)
+  predict[predict<0] = 0
+  tss = sum((y - mean(y))^2)
+  rss = sum((y-predict)^2)
+  rsq_ = max(0, 1 - rss/tss)
+  return(rsq_)
+}
+
+gam.results = function(form) {
+  model = gam(form, data=train)
+  cat("Train R^2: ",rsq(model, train, 19), "\n")
+  return(model)
+}
+```
+
+## Model #1: Complex Model with Audio and non-Audio Attributes
+```{r}
+results.3 = gam.results(formula.3)
+preds = predict(results.3)
+ggplot(train, mapping=aes(x=logfollowers, y=preds, color=featured)) + geom_point() + geom_abline(slope=1, intercept=0) +
+  scale_x_continuous(name="Log of # of followers") + scale_y_continuous(name="Predicted log of # of followers")#+ 
+
+plot(results.3, se=TRUE)
+#coef(results.3)
+summary(results.3)
+```
+
+
+## Model #2: Simpler Model with only basic Audio Attributes
+```{r}
+results.4 = gam.results(formula.4)
+preds = predict(results.4)
+ggplot(train, mapping=aes(x=logfollowers, y=preds, color=featured)) + geom_point() + geom_abline(slope=1, intercept=0) +
+  scale_x_continuous(name="Log of # of followers") + scale_y_continuous(name="Predicted log of # of followers")#+ 
+
+#scale_y_continuous(limits=c(-1,1)) + scale_x_continuous(limits=c(-1,1)) + coord_fixed(ratio = 1)
+#summary(new.results)
+
+plot(results.4, se=TRUE)
+#coef(results.4)
+summary(results.4)
+```
+## Model #3: Simpler Model with no Audio Attributes
+```{r}
+results.5 = gam.results(formula.5)
+preds = predict(results.5)
+ggplot(train, mapping=aes(x=logfollowers, y=preds, color=featured)) + geom_point() + geom_abline(slope=1, intercept=0) +
+  scale_x_continuous(name="Log of # of followers") + scale_y_continuous(name="Predicted log of # of followers")#+ 
+
+plot(results.5, se=TRUE)
+#coef(results.4)
+summary(results.5)
+```
+
+## Model #4: Only Audio Attributes
+```{r}
+formula.6 = as.formula(paste0("logfollowers ~ s(mean_popularity) + s(total_tracks)"))
+results.6 = gam.results(formula.6)
+preds = predict(results.6)
+ggplot(train, mapping=aes(x=logfollowers, y=preds, color=featured)) + geom_point() + geom_abline(slope=1, intercept=0) +
+  scale_x_continuous(name="Log of # of followers") + scale_y_continuous(name="Predicted log of # of followers")#+ 
+
+#plot(results.6, se=TRUE)
+#coef(results.4)
+summary(results.6)
+```
+
+## Likelihood Ratio Test to compare models
+
+```{r}
+anova(results.5, results.4, results.3, test='Chisq')
+```
+
+  # Only statistically significant difference is between models 1 and 2 (adding time signature and duration). Adding additional audio attributes beyond these two only has signifance at the p<0.1 level.
+  
+  
+## Model #5: Experimentation
+```{r}
+formula.exp =as.formula(paste0("logfollowers ~ s(acousticness) + s(acousticness_25) + s(acousticness_75) +
+                            s(danceability) + s(danceability_25) + s(danceability_75) + 
+                            s(duration) + s(duration_25) + s(duration_75) + 
+                            s(energy) + s(energy_25) + s(energy_75) +
+                            s(instrumentalness) + s(instrumentalness_25) + s(instrumentalness_75) + 
+                            key + key_25 + key_75 + 
+                            s(liveness) + s(liveness_25) + s(liveness_75) + 
+                            s(loudness) + s(loudness_25) + s(loudness_75) + 
+                            mode + mode_25 + mode_75 + 
+                            s(tempo) + s(tempo_25) + s(tempo_75) + 
+                            time_signature + time_signature_25 + time_signature_75 + 
+                            s(valence) + s(valence_25) + s(valence_75)"))
+
+formula.7 = as.formula(paste0("logfollowers ~ added_date + mode + s(acousticness) + s(acousticness_75) +
+                            s(danceability_25) + 
+                            s(loudness_25) + 
+                            s(mean_popularity) + 
+                            s(num_markets) +
+                            s(tempo_75) + 
+                            s(total_tracks) + 
+                            s(valence_25) + s(valence_75) +
+                            time_signature + time_signature_25 + time_signature_75
+"))
+formula.7 =as.formula(paste0("logfollowers ~ s(acousticness) + acousticness_75 +
+                            added_date + 
+                            danceability_25 +
+                            s(duration) + 
+                            s(energy_75) +
+                            featured +
+                            instrumentalness_75 + 
+                            s(key) + 
+                            s(liveness) + 
+                            s(mean_popularity) + 
+                            s(num_markets) + 
+                            time_signature + time_signature_25 + time_signature_75 + 
+                            s(total_tracks) + 
+                            valence_25"))
+exp.gam = gam(formula.exp, data=train)
+#results = gam.results(formula.7)
+preds = predict(exp.gam)
+ggplot(train, mapping=aes(x=logfollowers, y=preds, color=featured)) + geom_point() + geom_abline(slope=1, intercept=0) +
+  scale_x_continuous(name="Log of # of followers") + scale_y_continuous(name="Predicted log of # of followers")#+ 
+
+#plot(results.6, se=TRUE)
+#coef(results.4)
+summary(exp.gam)
+```
+  
