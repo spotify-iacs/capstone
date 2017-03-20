@@ -1,0 +1,45 @@
+---
+title: "Spotify 1: Intial Models for Predicting Number of Playlist Followers"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Read in the Data and drop unnecessary fields
+
+```{r}
+train.popularity <- read.csv("/Users/lware/Harvard/spotify/popularity.csv",
+                  header=TRUE,sep=',')
+train.features <- read.csv("/Users/lware/Harvard/spotify/all_features.csv",
+                  header=TRUE,sep=',')
+train.subset = train.features[setdiff(names(train.features), c("X","X6"))]
+#train.features = train.features[-1]
+#train.features = train.features[-7]
+library(mgcv)
+#dim(train)
+
+```
+
+```{r}
+train.2 = read.csv("/Users/lware/Harvard/spotify/raw_audio_features.csv",
+                  header=TRUE,sep=',')
+train.2.metadata = read.csv("/Users/lware/Harvard/spotify/raw_audio_metadata.csv",
+                  header=TRUE,sep=',')
+
+```
+
+```{r}
+pca <- prcomp(train.subset, scale = TRUE)
+summary(pca)
+first.2.principals = data.frame(pca$x[1:1000,1:2])
+#library(ggplot2)
+ggplot(data=first.2.principals,mapping = aes(x = PC1,y=PC2 )) + geom_point()
+
+```
+
+
+  
