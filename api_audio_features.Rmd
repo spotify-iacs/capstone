@@ -1,0 +1,129 @@
+---
+title: "Spotify 1: Intial Models for Predicting Number of Playlist Followers"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# Read in the data
+```{r}
+#train.features = read.csv("/Users/lware/Harvard/spotify/raw_audio_features.csv",
+#                  header=TRUE,sep=',')
+
+
+#train.metadata = read.csv("/Users/lware/Harvard/spotify/raw_audio_metadata.csv",
+#                  header=TRUE,sep=',')
+train.api = read.csv("/Users/lware/Harvard/spotify/capstone/song_features_laura.csv",
+                  header=TRUE,sep=',')
+dim(train.api)
+train.api = na.omit(train.api)
+dim(train.api)
+train.api = train.api[train.api$speechiness<0.34,]
+dim(train.api)
+
+train.subset = train.api[setdiff(names(train.api), c("names","preview_url", "id", "X", "time_signature", "mode"))]
+#train_kmeans = train.api[setdiff(names(train.api), c("names","preview_url", "id", "X"))]
+str(train.subset)
+```
+
+```{r}
+library(ggplot2)
+library(cluster)
+library(Rtsne)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+
+```
+
+```{r}
+#train.subset = train.api[setdiff(names(train.api), c("names","preview_url", "id", "X"))]
+#train.subset$time_signature = factor(train.subset$time_signature)
+#train.subset$mode = factor(train.subset$mode)
+str(train.subset)
+mds.subset = train.subset[1:3000,]
+
+train.dist <- daisy(mds.subset,
+                     metric = "gower")
+train.mds <- cmdscale(train.dist)
+mds.subset = data.frame(mds.subset, mds.point=train.mds)
+ggplot(mds.subset,
+       mapping = aes(x = mds.point.1,
+                     y = mds.point.2)) +
+    geom_point()
+```
+
+```{r}
+
+pca <- prcomp(train.subset, scale = TRUE)
+summary(pca)
+summary(pca)$importance[3,]
+screeplot(pca, npcs = 20)
+first.2.principals = data.frame(pca$x[,1:2])
+most.important.principals = data.frame(pca$x)
+#ggplot(data=first.2.principals,mapping = aes(x = X1,y=X2 )) + geom_point()
+pca$rotation[,1]
+pca$rotation[,2]
+
+# fuzzy clustering
+train.soft = train.subset[1:2000,]
+pca <- prcomp(train.soft, scale = TRUE)
+most.important.principals = data.frame(tsne$Y)
+soft.clusters = fanny(scale(train.soft), diss=FALSE, k=8, memb.exp = 1.25)
+soft.clusters
+soft.clusters$clustering
+plot(soft.clusters)
+```
+
+```{r}
+tsne = Rtsne(train.subset[1:500,], verbose=TRUE, check_duplicates=FALSE, max_iter=700, perplexity=6)
+most.important.principals = data.frame(tsne$Y)
+ggplot(data=most.important.principals ,mapping = aes(x = X1,y=X2, color=as.factor(soft.clusters$clustering))) + geom_point()
+```
+
+```{r}
+soft.clusters.output = train.api[1:nrow(train.soft),]
+#kmean.output = kmean.output[1:14887,]
+soft.clusters.output$cluster = soft.clusters$clustering
+soft.clusters.output$tsne1 = tsne$Y[,1]
+soft.clusters.output$tsne2 = tsne$Y[,2]
+soft.clusters.output$membership.1 = soft.clusters$membership[,1]
+soft.clusters.output$membership.2 = soft.clusters$membership[,2]
+soft.clusters.output$membership.3 = soft.clusters$membership[,3]
+soft.clusters.output$membership.4 = soft.clusters$membership[,4]
+soft.clusters.output$membership.5 = soft.clusters$membership[,5]
+
+write.csv(soft.clusters.output, file = "soft_clusters_output_api_duration.csv")
+```
+
+```{r}
+# k means clustering
+k.means.input = data.frame(pca$x[,1:2])
+k.means.raw = train.subset[1:2000,]
+k.means = kmeans(k.means.raw, 2, nstart = 25)
+k.means$cluster
+ggplot(data=k.means.input,mapping = aes(x = PC1,y=PC2, color=as.factor(k.means$cluster))) + geom_point()
+
+```
+
+```{r}
+output = train.api[1:3000,]
+output$mds1 = mds.subset$mds.point.1
+output$mds2 = mds.subset$mds.point.2
+write.csv(output, file = "mds_no_podcast.csv")
+
+kmean.output = train.api
+#kmean.output = kmean.output[1:14887,]
+kmean.output$cluster = k.means$cluster
+kmean.output$pc1 = pca$x[,1]
+kmean.output$pc2 = pca$x[,2]
+write.csv(kmean.output, file = "kmeans_output_api_no_podcast.csv")
+```
+
+  
