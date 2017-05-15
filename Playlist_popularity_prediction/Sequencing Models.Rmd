@@ -1,0 +1,207 @@
+---
+title: "Sequencing Models"
+author: "Omar O. Abboud"
+date: "4/10/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Reading in the Data
+
+```{r}
+
+api_data = read.csv('playlist_data_with_sequencing_4.8.17.csv')
+api_data = api_data[-c(1)]
+api_data = api_data[-c(13)]
+api_data = api_data[-c(69)]
+
+```
+
+## Initial Model Development
+
+### Dataframe Setup
+
+```{r}
+
+api_data$featured = as.integer(as.logical(api_data$featured))
+api_data <- within(api_data, followers <- as.integer(cut(followers, 
+        quantile(followers, probs=0:5/5), include.lowest=TRUE)))
+api_data$followers = as.factor(api_data$followers)
+api_data_2 = na.omit(api_data)
+
+smp_size <- floor(0.6 * nrow(api_data_2))
+
+## set the seed to make your partition reproductible
+
+set.seed(123)
+train_ind <- sample(seq_len(nrow(api_data_2)), size = smp_size)
+
+api_train <- api_data_2[train_ind, ]
+api_test <- api_data_2[-train_ind, ]
+
+```
+
+### Function Setup
+
+```{r}
+
+misclass_rate = function(preds, actual){
+  if(length(preds) != length(actual)){
+    return(NA)
+  }
+  else{
+    len = length(preds)
+    err_count = 0
+    for(i in 1:len){
+      if(preds[i] != actual[i]){
+        err_count = err_count + 1
+      }
+    }
+    return(err_count / len)
+    }
+}
+
+
+```
+
+### Support Vector Machine
+
+```{r}
+
+tune.linear = tune(svm, followers ~ ., data = api_train, kernel = "linear", ranges = list(cost = 10^(-5:0)))
+tune.rbf = tune(svm, ALL.AML ~ ., data = cancer_q2_train_red, kernel = "radial", ranges = list(gamma = 10^(-6:0), cost = seq(0.5,40,1.5)) )
+tune.linear
+tune.rbf
+```
+
+```{r}
+
+library(e1071)
+
+model1 = svm(followers ~ ., data = api_train, kernel = "radial", cost = 2, gamma = 0.1)
+
+misclass_rate = function(preds, actual){
+  if(length(preds) != length(actual)){
+    return(NA)
+  }
+  else{
+    len = length(preds)
+    err_count = 0
+    for(i in 1:len){
+      if(preds[i] != actual[i]){
+        err_count = err_count + 1
+      }
+    }
+    return(err_count / len)
+    }
+}
+
+table(api_train$followers, predict(model1, api_train))
+print("Training Misclassification Rate: ")
+misclass_rate(predict(model1, api_train), api_train$followers)
+print("###########")
+table(api_test$followers, predict(model1, api_test))
+print("Testing Misclassification Rate: ")
+misclass_rate(predict(model1, api_test), api_test$followers)
+
+
+```
+### RPART
+
+```{r}
+
+library(rpart)
+
+rfit = rpart(followers ~ ., method = "class", data = api_train)
+plot(rfit, uniform=TRUE, 
+  	main="Classification Tree for Followers")
+text(rfit, use.n=TRUE, all=TRUE, cex=.8)
+
+#summary(rfit)
+rfit$variable.importance
+
+```
+
+### Random Forest
+
+```{r}
+
+library(randomForest)
+
+ffit = randomForest(followers ~ ., data = api_train)
+importance(ffit)
+plot(ffit)
+
+varImpPlot(ffit)
+
+misclass_rate(predict(ffit, api_train), api_train$followers)
+misclass_rate(predict(ffit, api_test), api_test$followers)
+
+```
+### Random Forest: Part 2
+
+```{r}
+
+library(randomForest)
+
+ffit2 = randomForest(followers ~ ., data = api_train)
+
+plot(ffit2)
+
+varImpPlot(ffit2)
+
+table(api_train$followers, predict(ffit2, api_train))
+misclass_rate(predict(ffit2, api_train), api_train$followers)
+table(api_test$followers, predict(ffit2, api_test))
+misclass_rate(predict(ffit2, api_test), api_test$followers)
+
+print(importance(ffit2, type = 2))
+```
+
+
+### Random Forest with PCA
+
+```{r}
+
+library(randomForest)
+
+api_train_q = api_train[-c(6)]
+api_test_q = api_test[-c(6)]
+pca = prcomp(api_train_q)
+
+pca.vars = (pca$sdev)^2
+pca.vars.norm = pca.vars / sum(pca.vars)
+min(which(cumsum(pca.vars.norm) >= 0.95))
+
+pca.train = pca$x[,1:3]
+pca.test = scale(api_test_q, center = pca$center, scale = pca$scale)
+pca.test = pca.test %*% pca$rotation[,1:3]
+
+api_train_red = data.frame(api_train[,6], pca.train)
+api_test_red = data.frame(api_test[,6], pca.test)
+
+colnames(api_train_red)[1] = 'followers'
+colnames(api_test_red)[1] = 'followers'
+
+train_rates = c()
+test_rates = c()
+a = 1
+
+for(i in c(1,10,50,100,300,500,600,1000,2000,3000,5000,10000,20000)){
+  fit = randomForest(followers ~ ., data = api_train_red, importance = TRUE, ntree = i)
+  train_rates[[a]] = misclass_rate(predict(fit, api_train_red), api_train_red$followers)
+  test_rates[[a]] = misclass_rate(predict(fit, api_test_red), api_test_red$followers)
+  a = a + 1
+}
+
+plot(1:13, train_rates, type = 'o', pch = 20, ylim = range(c(train_rates, test_rates)), 
+     col = cols[1], xlab = 'i', ylab = 'Error Rate')
+points(1:13, test_rates, type = 'o', pch = 20, col = cols[2])
+legend('topleft', c('Training Error', 'Testing Error'), pch = 20, col = cols[1:2])
+
+
+```
+
