@@ -13,3 +13,5 @@ on earth movers distance and vantage point.
 spotify API
 5. CSV_files - csv files used for different models in all the above folders.
 6. Tracks - wav files of 3 songs used for demo.
+
+Link to website(and demo): https://rawgit.com/spotify-iacs/spotify-capstone/master/index.html
