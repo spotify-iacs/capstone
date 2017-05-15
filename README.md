@@ -1,7 +1,7 @@
 # Creating the Perfect Playlist:
 Optimizing Playlist Selection & Sequencing on Spotify
 
-1.Playlist_generation (playlist_generation.ipynb) - Uses our predictive model and acoustic
+1. Playlist_generation (playlist_generation.ipynb) - Uses our predictive model and acoustic
  similarity methods to generate candidate tracks from a seed song and perform simulated
   annealing optimization to generate a final playlist
 2. Dataset_creation - various iterations of our code to extract data from the Spotify API to 
